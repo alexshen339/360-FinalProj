@@ -1,0 +1,43 @@
+---
+title: "FinalProj"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(broom)
+```
+
+```{r}
+Spot <- read.csv("data.csv")
+Spot <- Spot %>% 
+  mutate(key = factor(key)) %>% 
+  mutate(mode = factor(mode)) %>% 
+  mutate(time_signature = factor(time_signature)) %>% 
+  select(acousticness, danceability, duration_ms, energy, instrumentalness, key, liveness, loudness, mode, speechiness, tempo, time_signature, valence, target)
+
+
+```
+
+```{r}
+int_only <- glm(target ~ 1, data = Spot, family = "binomial")
+full_model <- glm(target ~ acousticness + danceability+ duration_ms + energy + instrumentalness + key + liveness + loudness + mode + speechiness + tempo + time_signature + valence, data = Spot, family = "binomial")
+
+Selected_model <- step(full_model, scope = formula(int_only), direction = "backward", trace = 0)
+tidy(Selected_model) %>%
+  kable(digits = 3)
+```
+
+
+```{r}
+Selected_model_forward <- step(int_only, scope = formula(full_model), direction = "forward", trace = 0)
+tidy(Selected_model_forward) %>%
+  kable(digits = 3)
+```
+
+
+
