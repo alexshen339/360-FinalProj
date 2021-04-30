@@ -5,6 +5,13 @@ output: html_document
 
 ```{r setup, message=F, warning=F, echo=F}
 #
+require(tidyverse)
+require(rstanarm)
+require(magrittr)
+require(loo)
+require(bayesplot)
+require(caret)
+require(HSAUR3)
 library(tidyverse)
 library(caret)
 #library(GGally)
@@ -24,8 +31,11 @@ knitr::opts_chunk$set(fig.align = 'center')
 
 ```{r}
 spotify <- read.csv("data.csv")
-
 spotify <- as.data.frame(spotify)
+
+
+smeans <- colMeans(spotify[2:14])
+ssds <- apply(spotify[2:14], 2, sd)
 
 spotify <- spotify %>% 
   mutate(key = factor(key)) %>% 
@@ -33,18 +43,31 @@ spotify <- spotify %>%
   mutate(time_signature = factor(time_signature)) %>% 
   mutate(target = factor(target)) %>%
   select(acousticness, danceability, duration_ms, energy, instrumentalness, key, liveness, loudness, mode, speechiness, tempo, time_signature, valence, target)
+
+obs <- nrow(spotify)
+rows <- sample(obs, replace = FALSE)
+temp <- spotify[rows, ]
+spotify_test <- temp %>% 
+  slice(1:floor(.25*obs))
+spotify_train <- temp %>%
+  slice(floor(.25*obs)+1:obs)
+
+
+spotify_test
+spotify_train
+
 ```
 
 ```{r}
 c <- c(6,9,12,14)
 for (i in 1:13) {
   if(!(is.element(i,c))){
-      spotify[i] <- scale(spotify[i])
+      spotify_train[i] <- scale(spotify_train[i])
   }
 }
-summary(spotify)
+summary(spotify_train)
 sq <- 1:14
-corrplot(cor(spotify[, sq[!sq %in% c]]))
+corrplot(cor(spotify_train[, sq[!sq %in% c]]))
 
 
 ```
@@ -67,72 +90,78 @@ library(logspline)
 
 
 ```{r}
-o_model <- stan_glm(
-  formula = target ~ acousticness+danceability+duration_ms+energy+instrumentalness+key+liveness+loudness+mode+speechiness+tempo+time_signature+valence,
-  data = spotify,
-  prior = cauchy(0, 2.5, autoscale=FALSE),
-  family = binomial(link = "logit")
-)
-# full_model$coefficients
-# acousticness+danceability+duration_ms+energy+instrumentalness+key+liveness+loudness+mode+speechiness+tempo+time_signature+valence
-
-bayesfactor_parameters(o_model, null = 0)
-
-BF(o_model)
-
-
-
-half_model <- stan_glm(
-  formula = target ~ acousticness+danceability+duration_ms+instrumentalness+loudness+speechiness+tempo+valence,
-  data = spotify,
-  prior = cauchy(0, 2.5, autoscale=FALSE),
-  family = binomial(link = "logit")
-)
-
-bayesfactor_parameters(half_model, null = 0)
-
-BF(half_model)
-
-
-full_model <- stan_glm(
-  formula = target ~ acousticness+danceability+duration_ms+instrumentalness+loudness+speechiness+valence+mode*danceability+mode*valence+tempo*time_signature,
-  data = spotify,
-  prior = cauchy(0, 2.5, autoscale=FALSE), prior_intercept = cauchy(0, 2.5, autoscale=FALSE), QR=TRUE,
-  family = binomial(link = "logit")
-)
-
-bayesfactor_parameters(full_model, null = 0)
-
-BF(full_model)
-
-
-model <- stan_glm(
-  formula = target ~ acousticness+danceability+duration_ms+instrumentalness+loudness+speechiness+valence,
-  data = spotify,
-  prior = cauchy(0, 2.5, autoscale=FALSE), prior_intercept = cauchy(0, 2.5, autoscale=FALSE), QR=TRUE,
-  family = binomial(link = "logit")
-)
-
-bayesfactor_parameters(model, null = 0)
-
-BF(model)
+# o_model <- stan_glm(
+#   formula = target ~ acousticness+danceability+duration_ms+energy+instrumentalness+key+liveness+loudness+mode+speechiness+tempo+time_signature+valence,
+#   data = spotify_train,
+#   prior = cauchy(0, 2.5, autoscale=FALSE),
+#   family = binomial(link = "logit")
+# )
+# # full_model$coefficients
+# # acousticness+danceability+duration_ms+energy+instrumentalness+key+liveness+loudness+mode+speechiness+tempo+time_signature+valence
+# 
+# bayesfactor_parameters(o_model, null = 0)
+# 
+# BF(o_model)
+# 
+# 
+# 
+# half_model <- stan_glm(
+#   formula = target ~ acousticness+danceability+duration_ms+instrumentalness+loudness+speechiness+tempo+valence,
+#   data = spotify_train,
+#   prior = cauchy(0, 2.5, autoscale=FALSE),
+#   family = binomial(link = "logit")
+# )
+# 
+# bayesfactor_parameters(half_model, null = 0)
+# 
+# BF(half_model)
+# 
+# 
+# full_model <- stan_glm(
+#   formula = target ~ acousticness+danceability+duration_ms+instrumentalness+loudness+speechiness+valence+mode*danceability+mode*valence+tempo*time_signature,
+#   data = spotify_train,
+#   prior = cauchy(0, 2.5, autoscale=FALSE), prior_intercept = cauchy(0, 2.5, autoscale=FALSE), QR=TRUE,
+#   family = binomial(link = "logit")
+# )
+# 
+# bayesfactor_parameters(full_model, null = 0)
+# 
+# BF(full_model)
+# 
+# 
+# model <- stan_glm(
+#   formula = target ~ acousticness+danceability+duration_ms+instrumentalness+loudness+speechiness+valence,
+#   data = spotify_train,
+#   prior = cauchy(0, 2.5, autoscale=FALSE), prior_intercept = cauchy(0, 2.5, autoscale=FALSE), QR=TRUE,
+#   family = binomial(link = "logit")
+# )
+# 
+# bayesfactor_parameters(model, null = 0)
+# 
+# BF(model)
 ```
 
 
 ```{r}
 model <- stan_glm(
   formula = target ~ acousticness+danceability+duration_ms+instrumentalness+loudness+speechiness+valence,
-  data = spotify,
+  data = spotify_train,
   prior = cauchy(0, 2.5, autoscale=FALSE), prior_intercept = cauchy(0, 2.5, autoscale=FALSE), QR=TRUE,
   family = binomial(link = "logit"),
   refresh = 0
 )
+
+bayesfactor_parameters(model, null = 0)
+
+BF(model)
 
 round(coef(model), 3)
 round(posterior_interval(model, prob = 0.95), 3)
 mcmc_areas(as.matrix(model), prob = 0.95, prob_outer = 1) + geom_vline(xintercept=0)
 
 (loo1 <- loo(model, save_psis = TRUE))
+
+car::vif(model)
 ```
 ```{r}
 model0 <- update(model, formula = target ~ 1, QR = FALSE)
@@ -146,346 +175,347 @@ pred <- colMeans(preds)
 pr <- as.integer(pred >= 0.5)
    
 # posterior classification accuracy
-round(mean(xor(pr,as.integer(y==0))),3)
+round(mean(xor(pr,as.integer(spotify_train$target==0))),3)
 ```
-```{r}
-
-```
-
-
-
 
 
 ```{r}
-#### Plotting functions
-##########
-plot.hdr2d<-function(x,prob=c(.025,.25,.5,.75,.975),bw=c(5,5),
-                     cols=gray(  ((length(prob)-1):1)/length(prob)), 
-                     xlim=range(x[,1]),ylim=range(x[,2]),...) 
-{
-  
-  #adapted from package hdrcde by Rob J Hyndman and Jochen Einbeck
-  
-  plot(c(0,0),xlim=xlim,ylim=ylim,type="n",...)
-  add.hdr2d(x,prob,bw,cols) 
+vars <- c("acousticness", "danceability", "duration_ms", "instrumentalness", "loudness", "speechiness", "valence")
+coefficients <- coef(model)
+for(var in vars){
+  coefficients[var] <- coefficients[var]/ssds[var]
+  coefficients["(Intercept)"] <- coefficients["(Intercept)"] - coefficients[var]*smeans[var]
 }
-
-#########
-
-#########
-add.hdr2d<-function(x,prob=c(.025,.25,.5,.75,.975),bw=c(5,5),
-                    cols=gray(  ((length(prob)-1):1)/length(prob)  )) 
-{
-  
-  require(ash)
-  den <- ash2(bin2(x,nbin=round(rep(.5*sqrt(dim(x)[1]),2)) ), bw)
-  fxy <- interp.2d(den$x,den$y,den$z,x[,1],x[,2])
-  falpha <- quantile(sort(fxy), prob)
-  index <- (fxy==max(fxy))
-  mode <- c(x[index,1],x[index,2])
-  .filled.contour(den$x,den$y,den$z,levels=c(falpha,1e10),col=cols ) 
-  
-}
-
-#########
-interp.2d<- function(x, y, z, x0, y0)
-{
-  # Bilinear interpolation of function (x,y,z) onto (x0,y0).
-  # Taken from Numerical Recipies (second edition) section 3.6.
-  # Called by hdr.info.2d
-  # Vectorized version of old.interp.2d. 
-  # Contributed by Mrigesh Kshatriya (mkshatriya@zoology.up.ac.za)
-  
-  nx <- length(x)
-  ny <- length(y)
-  n0 <- length(x0)
-  z0 <- numeric(length = n0)
-  xr <- diff(range(x))
-  yr <- diff(range(y))
-  xmin <- min(x)
-  ymin <- min(y)
-  j <- ceiling(((nx - 1) * (x0 - xmin))/xr)
-  k <- ceiling(((ny - 1) * (y0 - ymin))/yr)
-  j[j == 0] <- 1
-  k[k == 0] <- 1
-  j[j == nx] <- nx - 1
-  k[k == ny] <- ny - 1
-  v <- (x0 - x[j])/(x[j + 1] - x[j])
-  u <- (y0 - y[k])/(y[k + 1] - y[k]) 
-  AA <- z[cbind(j, k)]
-  BB <- z[cbind(j + 1, k)]
-  CC <- z[cbind(j + 1, k + 1)]
-  DD <- z[cbind(j, k + 1)]
-  z0 <- (1 - v)*(1 - u)*AA + v*(1 - u)*BB + v*u*CC + (1 - v)*u*DD
-  return(z0)
-}
-
-#### lm.gprior functions
-
-lm.gprior<-function(y,X,g=dim(X)[1],nu0=1,s20=try(summary(lm(y~-1+X))$sigma^2,silent=TRUE),S=1000)
-{
-  
-  n<-dim(X)[1] ; p<-dim(X)[2]
-  Hg<- (g/(g+1)) * X%*%solve(t(X)%*%X)%*%t(X)
-  SSRg<- t(y)%*%( diag(1,nrow=n)  - Hg ) %*%y
-  
-  s2<-1/rgamma(S, (nu0+n)/2, (nu0*s20+SSRg)/2 )
-  
-  Vb<- g*solve(t(X)%*%X)/(g+1)
-  Eb<- Vb%*%t(X)%*%y
-  
-  E<-matrix(rnorm(S*p,0,sqrt(s2)),S,p)
-  beta<-t(  t(E%*%chol(Vb)) +c(Eb))
-  
-  list(beta=beta,s2=s2)                                
-}
-
+coefficients
 ```
-
 
 
 ```{r}
-#### Visualizing the data
-par(mar=c(3,3,1,1),mgp=c(1.75,.75,0))
-
-### Variables
-
-spotify <- read.csv("data.csv")
-df <- data.frame(spotify)
-
-y <- spotify$target
-
-AC <- spotify$acousticness
-DA <- spotify$danceability
-DU <- spotify$duration_ms
-EN <- spotify$energy
-IN <- spotify$instrumentalness
-KE <- spotify$key
-LI <- spotify$liveness
-LO <- spotify$loudness
-MO <- spotify$mode
-SP <- spotify$speechiness
-TE <- spotify$tempo
-TI <- spotify$time_signature
-VA <- spotify$valence
-
-SO <- spotify$song_title
-AR <- spotify$artist
-
-ivars <- list(AC, DA, DU, EN, IN, KE, LI, LO, MO, SP, TE, TI, VA)
+spotify_train2 <- spotify_train %>% 
+  select(acousticness, danceability, duration_ms, instrumentalness, loudness, speechiness, valence)
+ip <- as.matrix(spotify_train2) %*% (as.matrix(coefficients)[1:ncol(spotify_train2)+1]) + rep(as.matrix(coefficients)[1],nrow(spotify_train2))
+yhat <- exp(ip)/(1+exp(ip)) >= 0.5
 
 
-spotx <- as.matrix(spotify[,2:6])
-k <- dim(spotx)[2]
+yhat <- as.integer(yhat)
+ytrain <- spotify_train$target
+mean(yhat == ytrain)
+
+spotify_test2 <- spotify_test %>% 
+  select(acousticness, danceability, duration_ms, instrumentalness, loudness, speechiness, valence)
+ip <- as.matrix(spotify_test2) %*% (as.matrix(coefficients)[1:ncol(spotify_test2)+1]) + rep(as.matrix(coefficients)[1],nrow(spotify_test2))
+yhat_test <- exp(ip)/(1+exp(ip)) >= 0.5
 
 
-
-c <- 1
-for(x in ivars){
-  par(mfrow=c(1,1))
-  plot(y~x,pch=16,xlab=colnames(spotify[c+1]),ylab="target", 
-       col=c("black","gray")[y+1])
-  legend(27,0,legend=c("aerobic","running"),pch=c(16,16),col=c("gray","black"))
-  c <- c+1
-}
-
-
+yhat_test <- as.integer(yhat_test)
+ytest <- spotify_test$target
+mean(yhat_test == ytest)
 ```
 
 
 
-```{r}
+<!-- ```{r} -->
+<!-- #### Plotting functions -->
+<!-- ########## -->
+<!-- plot.hdr2d<-function(x,prob=c(.025,.25,.5,.75,.975),bw=c(5,5), -->
+<!--                      cols=gray(  ((length(prob)-1):1)/length(prob)),  -->
+<!--                      xlim=range(x[,1]),ylim=range(x[,2]),...)  -->
+<!-- { -->
 
-#### Visualizing different regression fits
-par(mfrow=c(2,2),mar=c(3,3,1,1),mgp=c(1.75,.75,0),oma=c(0,0,.25,0))
+<!--   #adapted from package hdrcde by Rob J Hyndman and Jochen Einbeck -->
 
-# Model 1: intercept models for aerobic and running
-plot(y~x2,pch=16,col=c("black","gray")[x1+1],ylab="change in maximal oxygen uptake",xlab="",xaxt="n")
-abline(h=mean(y[x1==0]),col="black") 
-abline(h=mean(y[x1==1]),col="gray")
-mtext(side=3,expression(paste(beta[3]==0,"  ",beta[4]==0)) )
+<!--   plot(c(0,0),xlim=xlim,ylim=ylim,type="n",...) -->
+<!--   add.hdr2d(x,prob,bw,cols)  -->
+<!-- } -->
 
-# Model 2: slope model
-plot(y~x2,pch=16,col=c("black","gray")[x1+1],xlab="",ylab="",xaxt="n",yaxt="n")
-abline(lm(y~x2),col="black")
-abline(lm((y+.5)~x2),col="gray")
-mtext(side=3,expression(paste(beta[2]==0,"  ",beta[4]==0)) )
+<!-- ######### -->
 
-# Model 3: linear model for aerobic and running
-plot(y~x2,pch=16,col=c("black","gray")[x1+1],
-     xlab="age",ylab="change in maximal oxygen uptake" )
-fit<-lm( y~x1+x2)
-abline(a=fit$coef[1],b=fit$coef[3],col="black")
-abline(a=fit$coef[1]+fit$coef[2],b=fit$coef[3],col="gray")
-mtext(side=3,expression(beta[4]==0)) 
+<!-- ######### -->
+<!-- add.hdr2d<-function(x,prob=c(.025,.25,.5,.75,.975),bw=c(5,5), -->
+<!--                     cols=gray(  ((length(prob)-1):1)/length(prob)  ))  -->
+<!-- { -->
 
-# Model 4: full interaction model
-plot(y~x2,pch=16,col=c("black","gray")[x1+1],
-     xlab="age",ylab="",yaxt="n")
-abline(lm(y[x1==0]~x2[x1==0]),col="black")
-abline(lm(y[x1==1]~x2[x1==1]),col="gray")
+<!--   require(ash) -->
+<!--   den <- ash2(bin2(x,nbin=round(rep(.5*sqrt(dim(x)[1]),2)) ), bw) -->
+<!--   fxy <- interp.2d(den$x,den$y,den$z,x[,1],x[,2]) -->
+<!--   falpha <- quantile(sort(fxy), prob) -->
+<!--   index <- (fxy==max(fxy)) -->
+<!--   mode <- c(x[index,1],x[index,2]) -->
+<!--   .filled.contour(den$x,den$y,den$z,levels=c(falpha,1e10),col=cols )  -->
 
-```
+<!-- } -->
+
+<!-- ######### -->
+<!-- interp.2d<- function(x, y, z, x0, y0) -->
+<!-- { -->
+<!--   # Bilinear interpolation of function (x,y,z) onto (x0,y0). -->
+<!--   # Taken from Numerical Recipies (second edition) section 3.6. -->
+<!--   # Called by hdr.info.2d -->
+<!--   # Vectorized version of old.interp.2d.  -->
+<!--   # Contributed by Mrigesh Kshatriya (mkshatriya@zoology.up.ac.za) -->
+
+<!--   nx <- length(x) -->
+<!--   ny <- length(y) -->
+<!--   n0 <- length(x0) -->
+<!--   z0 <- numeric(length = n0) -->
+<!--   xr <- diff(range(x)) -->
+<!--   yr <- diff(range(y)) -->
+<!--   xmin <- min(x) -->
+<!--   ymin <- min(y) -->
+<!--   j <- ceiling(((nx - 1) * (x0 - xmin))/xr) -->
+<!--   k <- ceiling(((ny - 1) * (y0 - ymin))/yr) -->
+<!--   j[j == 0] <- 1 -->
+<!--   k[k == 0] <- 1 -->
+<!--   j[j == nx] <- nx - 1 -->
+<!--   k[k == ny] <- ny - 1 -->
+<!--   v <- (x0 - x[j])/(x[j + 1] - x[j]) -->
+<!--   u <- (y0 - y[k])/(y[k + 1] - y[k])  -->
+<!--   AA <- z[cbind(j, k)] -->
+<!--   BB <- z[cbind(j + 1, k)] -->
+<!--   CC <- z[cbind(j + 1, k + 1)] -->
+<!--   DD <- z[cbind(j, k + 1)] -->
+<!--   z0 <- (1 - v)*(1 - u)*AA + v*(1 - u)*BB + v*u*CC + (1 - v)*u*DD -->
+<!--   return(z0) -->
+<!-- } -->
+
+<!-- #### lm.gprior functions -->
+
+<!-- lm.gprior<-function(y,X,g=dim(X)[1],nu0=1,s20=try(summary(lm(y~-1+X))$sigma^2,silent=TRUE),S=1000) -->
+<!-- { -->
+
+<!--   n<-dim(X)[1] ; p<-dim(X)[2] -->
+<!--   Hg<- (g/(g+1)) * X%*%solve(t(X)%*%X)%*%t(X) -->
+<!--   SSRg<- t(y)%*%( diag(1,nrow=n)  - Hg ) %*%y -->
+
+<!--   s2<-1/rgamma(S, (nu0+n)/2, (nu0*s20+SSRg)/2 ) -->
+
+<!--   Vb<- g*solve(t(X)%*%X)/(g+1) -->
+<!--   Eb<- Vb%*%t(X)%*%y -->
+
+<!--   E<-matrix(rnorm(S*p,0,sqrt(s2)),S,p) -->
+<!--   beta<-t(  t(E%*%chol(Vb)) +c(Eb)) -->
+
+<!--   list(beta=beta,s2=s2)                                 -->
+<!-- } -->
+
+<!-- ``` -->
 
 
 
-```{r}
+<!-- ```{r} -->
+<!-- #### Visualizing the data -->
+<!-- par(mar=c(3,3,1,1),mgp=c(1.75,.75,0)) -->
 
-#### least-squares estimate
+<!-- ### Variables -->
 
-spotx <- as.matrix(spotify[2:14])
-k <- dim(spotx)[2]
+<!-- spotify_train <- read.csv("data.csv") -->
+<!-- df <- data.frame(spotify_train) -->
 
-n<-length(y)
-X <- cbind(rep(1,n),as.matrix(spotx))
+<!-- y <- spotify_train$target -->
 
-# for(i in seq(2,k)){
-#   for(j in seq(i+1,k+1)){
-#     X <- c(X,spotify$varnames[i]*spotify$varnames[j])
-#   }
-# }
+<!-- AC <- spotify_train$acousticness -->
+<!-- DA <- spotify_train$danceability -->
+<!-- DU <- spotify_train$duration_ms -->
+<!-- EN <- spotify_train$energy -->
+<!-- IN <- spotify_train$instrumentalness -->
+<!-- KE <- spotify_train$key -->
+<!-- LI <- spotify_train$liveness -->
+<!-- LO <- spotify_train$loudness -->
+<!-- MO <- spotify_train$mode -->
+<!-- SP <- spotify_train$speechiness -->
+<!-- TE <- spotify_train$tempo -->
+<!-- TI <- spotify_train$time_signature -->
+<!-- VA <- spotify_train$valence -->
 
+<!-- SO <- spotify_train$song_title -->
+<!-- AR <- spotify_train$artist -->
 
-
-# j1 <- rep.int(1:(n-1), (n-1):1)
-# j2 <- sequence((n-1):1) - 1L + j1 + 1
-
-
-acousticness+danceability+duration_ms+energy+instrumentalness+key+liveness+loudness+mode+speechiness+tempo+time_signature+valence
-
-
-
-
-```
-
-
-
-```{r}
+<!-- ivars <- list(AC, DA, DU, EN, IN, KE, LI, LO, MO, SP, TE, TI, VA) -->
 
 
-#### PART I: Bayesian linear regression via weakly-informative priors (requires MCMC)
-n<-length(y) # no. of data points
-X<-cbind(rep(1,n),x1,x2,x1*x2) #covariate matrix
-p<-dim(X)[2] # no. of covariates
+<!-- spotx <- as.matrix(spotify_train[,2:6]) -->
+<!-- k <- dim(spotx)[2] -->
 
-# prior parameters
-fit.ls<-lm(y~-1+ X) #standard linear regression fit ("-1" means we don't include an intercept, since we have that in X already)
-beta.ls #check lse
-fit.ls$coefficients
-RSS <- sum(fit.ls$res^2)
-mu<-rep(0,p) ; TT<-diag(c(150,30,6,5)^2,p)
-nu<-1  ; gamma2<-8.0
-Sigma <- solve(t(X)%*%X)*gamma2*n
-beta <- beta.ls
 
-S<-10000 #no. of MCMC samples
 
-rmvnorm<-function(n,mu,Sigma) 
-{ # samples from the multivariate normal distribution
-  E<-matrix(rnorm(n*length(mu)),n,length(mu))
-  t(  t(E%*%chol(Sigma)) +c(mu))
-}
+<!-- c <- 1 -->
+<!-- for(x in ivars){ -->
+<!--   par(mfrow=c(1,1)) -->
+<!--   plot(y~x,pch=16,xlab=colnames(spotify_train[c+1]),ylab="target",  -->
+<!--        col=c("black","gray")[y+1]) -->
+<!--   legend(27,0,legend=c("aerobic","running"),pch=c(16,16),col=c("gray","black")) -->
+<!--   c <- c+1 -->
+<!-- } -->
 
-## some convenient quantities
-n<-length(y)
-p<-length(beta)
-iSigma<-solve(Sigma)
-XtX<-t(X)%*%X
 
-## store mcmc samples in these objects
-beta.post<-matrix(nrow=S,ncol=p)
-sigma2.post<-rep(NA,S)
+<!-- ``` -->
 
-## MCMC algorithm
-set.seed(1)
-for( s in 1:S) {
-  
-  #update sigma2
-  nu.n<- nu+n
-  ss.n <- nu*gamma2 + sum(  (y-X%*%beta)^2 )
-  sigma2<-1/rgamma(1,nu.n/2, ss.n/2)
-  
-  #update beta
-  V.beta<- solve(  iSigma + XtX/sigma2 )
-  E.beta<- V.beta%*%( iSigma%*%beta + t(X)%*%y/sigma2 )
-  beta<-t(rmvnorm(1, E.beta,V.beta) )
-  
-  #save results of this scan
-  beta.post[s,]<-beta
-  sigma2.post[s]<-sigma2
-}
 
-round( colMeans(beta.post), 3) #posterior mean of beta
-round( mean(sigma2.post), 3) #posterior mean for sigma^2
 
-# plotting HPD regions for different parameter pairs
-lb <- apply(beta.post,2,min) #lower bound for plotting
-ub <- apply(beta.post,2,max) #upper bound for plotting
-par(mfrow=c(1,2))
-plot.hdr2d(beta.post[,c(3,4)],xlab=expression(beta[3]),ylab=expression(beta[4]),
-           xlim=c(lb[3],ub[3]),ylim=c(lb[4],ub[4])) #hpd for beta3 and beta4
-plot.hdr2d(cbind(beta.post[,1],sigma2.post),xlab=expression(beta[1]),ylab=expression(sigma^2),
-           xlim=c(lb[1],ub[1]),ylim=c(min(sigma2.post),max(sigma2.post))) #hpd for beta1 and sigma2
+<!-- ```{r} -->
 
-#### PART II: Bayesian linear regression via g-priors (direct posterior sampling)
-g<-n ; nu<-1 ; gamma2<-8; #hyperparameters
-S <- 10000 #no. of MCMC samples
-tmp<-lm.gprior(y=y,X=X,g=g,nu0=nu,s20=gamma2,S=S) # posterior sampling with g-prior
-beta.post<-tmp$beta # posterior beta samples
-sigma2.post<-tmp$s2 # posterior sigma^2 samples
-iXX <- solve(t(X)%*%X)
+<!-- #### Visualizing different regression fits -->
+<!-- par(mfrow=c(2,2),mar=c(3,3,1,1),mgp=c(1.75,.75,0),oma=c(0,0,.25,0)) -->
 
-mdt<-function(t,mu,sig,nu){ 
-  
-  gamma(.5*(nu+1))*(1+ ( (t-mu)/sig )^2/nu )^(-.5*(nu+1))/ 
-    ( sqrt(nu*pi)*sig* gamma(nu/2)  )
-}
+<!-- # Model 1: intercept models for aerobic and running -->
+<!-- plot(y~x2,pch=16,col=c("black","gray")[x1+1],ylab="change in maximal oxygen uptake",xlab="",xaxt="n") -->
+<!-- abline(h=mean(y[x1==0]),col="black")  -->
+<!-- abline(h=mean(y[x1==1]),col="gray") -->
+<!-- mtext(side=3,expression(paste(beta[3]==0,"  ",beta[4]==0)) ) -->
 
-#### Figure 9.3 (marginal densities & pairwise HPD for posterior)
-par(mfrow=c(1,3),mar=c(2.75,2.75,.5,.5),mgp=c(1.7,.7,0))
+<!-- # Model 2: slope model -->
+<!-- plot(y~x2,pch=16,col=c("black","gray")[x1+1],xlab="",ylab="",xaxt="n",yaxt="n") -->
+<!-- abline(lm(y~x2),col="black") -->
+<!-- abline(lm((y+.5)~x2),col="gray") -->
+<!-- mtext(side=3,expression(paste(beta[2]==0,"  ",beta[4]==0)) ) -->
 
-x<-seq(-85,130,length=200)
-plot(density(beta.post[,2],adj=2),xlab=expression(beta[2]),main="",ylab="",lwd=2)
-abline(v=0,col="gray")
-lines(x,mdt(x,0,sqrt(n*gamma2*iXX[2,2]),nu ),col="gray")
+<!-- # Model 3: linear model for aerobic and running -->
+<!-- plot(y~x2,pch=16,col=c("black","gray")[x1+1], -->
+<!--      xlab="age",ylab="change in maximal oxygen uptake" ) -->
+<!-- fit<-lm( y~x1+x2) -->
+<!-- abline(a=fit$coef[1],b=fit$coef[3],col="black") -->
+<!-- abline(a=fit$coef[1]+fit$coef[2],b=fit$coef[3],col="gray") -->
+<!-- mtext(side=3,expression(beta[4]==0))  -->
 
-x<-seq(-5,5,length=100)
-plot(density(beta.post[,4],adj=2),xlab=expression(beta[4]),main="",ylab="",lwd=2)
-abline(v=0,col="gray")
-lines(x,mdt(x,0,sqrt(n*gamma2*iXX[4,4]),nu ),col="gray")
+<!-- # Model 4: full interaction model -->
+<!-- plot(y~x2,pch=16,col=c("black","gray")[x1+1], -->
+<!--      xlab="age",ylab="",yaxt="n") -->
+<!-- abline(lm(y[x1==0]~x2[x1==0]),col="black") -->
+<!-- abline(lm(y[x1==1]~x2[x1==1]),col="gray") -->
 
-plot.hdr2d( beta.post[,c(2,4)],xlab=expression(beta[2]),
-            ylab=expression(beta[4]))
-abline(h=0,col="gray") ; abline(v=0,col="gray")
+<!-- ``` -->
 
-#### Figure 9.4
-#### (posterior 95% quantile-based intervals for \beta_2+\beta_4*age: the effect of the aerobic over the running program)
 
-BX<-NULL
-for(s in 1:dim(beta.post)[1]) { 
-  BX<-rbind(BX, beta.post[s,2] + (min(X[,3]):max(X[,3]))*beta.post[s,4] )
-}
 
-# plotting function
-qboxplot<-function(x,at=0,width=.5,probs=c(.025,.25,.5,.75,.975))
-{
-  qx<-quantile(x,probs=probs)
-  segments(at,qx[1],at,qx[5])
-  polygon(x=c(at-width,at+width,at+width,at-width),
-          y=c(qx[2],qx[2],qx[4],qx[4]) ,col="gray")
-  segments(at-width,qx[3],at+width,qx[3],lwd=3)
-  segments(at-width/2,qx[1],at+width/2,qx[1],lwd=1)
-  segments(at-width/2,qx[5],at+width/2,qx[5],lwd=1)
-} 
 
-par(mfrow=c(1,1),mar=c(3,3,1,1),mgp=c(1.75,.75,0))
-plot(range(X[,3]),range(y),type="n",xlab="age",
-     #   ylab="expected difference in change score")
-     ylab=expression(paste( beta[2] + beta[4],"age",sep="") ) )
-for( age  in  1:dim(BX)[2]  ) {
-  qboxplot( BX[,age] ,at=age+19 , width=.25) }  
 
-abline(h=0,col="gray")
 
-```
+<!-- ```{r} -->
+
+
+<!-- #### PART I: Bayesian linear regression via weakly-informative priors (requires MCMC) -->
+<!-- n<-length(y) # no. of data points -->
+<!-- X<-cbind(rep(1,n),x1,x2,x1*x2) #covariate matrix -->
+<!-- p<-dim(X)[2] # no. of covariates -->
+
+<!-- # prior parameters -->
+<!-- fit.ls<-lm(y~-1+ X) #standard linear regression fit ("-1" means we don't include an intercept, since we have that in X already) -->
+<!-- beta.ls #check lse -->
+<!-- fit.ls$coefficients -->
+<!-- RSS <- sum(fit.ls$res^2) -->
+<!-- mu<-rep(0,p) ; TT<-diag(c(150,30,6,5)^2,p) -->
+<!-- nu<-1  ; gamma2<-8.0 -->
+<!-- Sigma <- solve(t(X)%*%X)*gamma2*n -->
+<!-- beta <- beta.ls -->
+
+<!-- S<-10000 #no. of MCMC samples -->
+
+<!-- rmvnorm<-function(n,mu,Sigma)  -->
+<!-- { # samples from the multivariate normal distribution -->
+<!--   E<-matrix(rnorm(n*length(mu)),n,length(mu)) -->
+<!--   t(  t(E%*%chol(Sigma)) +c(mu)) -->
+<!-- } -->
+
+<!-- ## some convenient quantities -->
+<!-- n<-length(y) -->
+<!-- p<-length(beta) -->
+<!-- iSigma<-solve(Sigma) -->
+<!-- XtX<-t(X)%*%X -->
+
+<!-- ## store mcmc samples in these objects -->
+<!-- beta.post<-matrix(nrow=S,ncol=p) -->
+<!-- sigma2.post<-rep(NA,S) -->
+
+<!-- ## MCMC algorithm -->
+<!-- set.seed(1) -->
+<!-- for( s in 1:S) { -->
+
+<!--   #update sigma2 -->
+<!--   nu.n<- nu+n -->
+<!--   ss.n <- nu*gamma2 + sum(  (y-X%*%beta)^2 ) -->
+<!--   sigma2<-1/rgamma(1,nu.n/2, ss.n/2) -->
+
+<!--   #update beta -->
+<!--   V.beta<- solve(  iSigma + XtX/sigma2 ) -->
+<!--   E.beta<- V.beta%*%( iSigma%*%beta + t(X)%*%y/sigma2 ) -->
+<!--   beta<-t(rmvnorm(1, E.beta,V.beta) ) -->
+
+<!--   #save results of this scan -->
+<!--   beta.post[s,]<-beta -->
+<!--   sigma2.post[s]<-sigma2 -->
+<!-- } -->
+
+<!-- round( colMeans(beta.post), 3) #posterior mean of beta -->
+<!-- round( mean(sigma2.post), 3) #posterior mean for sigma^2 -->
+
+<!-- # plotting HPD regions for different parameter pairs -->
+<!-- lb <- apply(beta.post,2,min) #lower bound for plotting -->
+<!-- ub <- apply(beta.post,2,max) #upper bound for plotting -->
+<!-- par(mfrow=c(1,2)) -->
+<!-- plot.hdr2d(beta.post[,c(3,4)],xlab=expression(beta[3]),ylab=expression(beta[4]), -->
+<!--            xlim=c(lb[3],ub[3]),ylim=c(lb[4],ub[4])) #hpd for beta3 and beta4 -->
+<!-- plot.hdr2d(cbind(beta.post[,1],sigma2.post),xlab=expression(beta[1]),ylab=expression(sigma^2), -->
+<!--            xlim=c(lb[1],ub[1]),ylim=c(min(sigma2.post),max(sigma2.post))) #hpd for beta1 and sigma2 -->
+
+<!-- #### PART II: Bayesian linear regression via g-priors (direct posterior sampling) -->
+<!-- g<-n ; nu<-1 ; gamma2<-8; #hyperparameters -->
+<!-- S <- 10000 #no. of MCMC samples -->
+<!-- tmp<-lm.gprior(y=y,X=X,g=g,nu0=nu,s20=gamma2,S=S) # posterior sampling with g-prior -->
+<!-- beta.post<-tmp$beta # posterior beta samples -->
+<!-- sigma2.post<-tmp$s2 # posterior sigma^2 samples -->
+<!-- iXX <- solve(t(X)%*%X) -->
+
+<!-- mdt<-function(t,mu,sig,nu){  -->
+
+<!--   gamma(.5*(nu+1))*(1+ ( (t-mu)/sig )^2/nu )^(-.5*(nu+1))/  -->
+<!--     ( sqrt(nu*pi)*sig* gamma(nu/2)  ) -->
+<!-- } -->
+
+<!-- #### Figure 9.3 (marginal densities & pairwise HPD for posterior) -->
+<!-- par(mfrow=c(1,3),mar=c(2.75,2.75,.5,.5),mgp=c(1.7,.7,0)) -->
+
+<!-- x<-seq(-85,130,length=200) -->
+<!-- plot(density(beta.post[,2],adj=2),xlab=expression(beta[2]),main="",ylab="",lwd=2) -->
+<!-- abline(v=0,col="gray") -->
+<!-- lines(x,mdt(x,0,sqrt(n*gamma2*iXX[2,2]),nu ),col="gray") -->
+
+<!-- x<-seq(-5,5,length=100) -->
+<!-- plot(density(beta.post[,4],adj=2),xlab=expression(beta[4]),main="",ylab="",lwd=2) -->
+<!-- abline(v=0,col="gray") -->
+<!-- lines(x,mdt(x,0,sqrt(n*gamma2*iXX[4,4]),nu ),col="gray") -->
+
+<!-- plot.hdr2d( beta.post[,c(2,4)],xlab=expression(beta[2]), -->
+<!--             ylab=expression(beta[4])) -->
+<!-- abline(h=0,col="gray") ; abline(v=0,col="gray") -->
+
+<!-- #### Figure 9.4 -->
+<!-- #### (posterior 95% quantile-based intervals for \beta_2+\beta_4*age: the effect of the aerobic over the running program) -->
+
+<!-- BX<-NULL -->
+<!-- for(s in 1:dim(beta.post)[1]) {  -->
+<!--   BX<-rbind(BX, beta.post[s,2] + (min(X[,3]):max(X[,3]))*beta.post[s,4] ) -->
+<!-- } -->
+
+<!-- # plotting function -->
+<!-- qboxplot<-function(x,at=0,width=.5,probs=c(.025,.25,.5,.75,.975)) -->
+<!-- { -->
+<!--   qx<-quantile(x,probs=probs) -->
+<!--   segments(at,qx[1],at,qx[5]) -->
+<!--   polygon(x=c(at-width,at+width,at+width,at-width), -->
+<!--           y=c(qx[2],qx[2],qx[4],qx[4]) ,col="gray") -->
+<!--   segments(at-width,qx[3],at+width,qx[3],lwd=3) -->
+<!--   segments(at-width/2,qx[1],at+width/2,qx[1],lwd=1) -->
+<!--   segments(at-width/2,qx[5],at+width/2,qx[5],lwd=1) -->
+<!-- }  -->
+
+<!-- par(mfrow=c(1,1),mar=c(3,3,1,1),mgp=c(1.75,.75,0)) -->
+<!-- plot(range(X[,3]),range(y),type="n",xlab="age", -->
+<!--      #   ylab="expected difference in change score") -->
+<!--      ylab=expression(paste( beta[2] + beta[4],"age",sep="") ) ) -->
+<!-- for( age  in  1:dim(BX)[2]  ) { -->
+<!--   qboxplot( BX[,age] ,at=age+19 , width=.25) }   -->
+
+<!-- abline(h=0,col="gray") -->
+
+<!-- ``` -->
 
