@@ -25,7 +25,7 @@ library(BFpack)
 library(bayestestR)
 library(logspline)
 #library(projpred)
-SEED=14124869
+#SEED=14124869
 
 #
 ggplot2::theme_set(ggplot2::theme_bw())
@@ -85,7 +85,7 @@ for (i in 1:13) {
       spotify_train[i] <- scale(spotify_train[i])
   }
 }
-summary(spotify_train)
+
 sq <- 1:14
 corrplot(cor(spotify_train[, sq[!sq %in% c]]))
 
@@ -154,7 +154,7 @@ We calculated the Bayes factor of each coefficient compared to a point-null, whi
 
 ```{r}
 model <- stan_glm(
-  formula = target ~ acousticness+danceability+duration_ms+instrumentalness+loudness+speechiness+valence,
+  formula = target ~ acousticness+danceability+duration_ms+energy+instrumentalness+key+liveness+loudness+mode+speechiness+tempo+time_signature+valence,
   data = spotify_train,
   prior = cauchy(0, 2.5, autoscale=FALSE), prior_intercept = cauchy(0, 2.5, autoscale=FALSE), QR=TRUE,
   family = binomial(link = "logit"),
@@ -176,8 +176,33 @@ car::vif(model)
 
 
 ```{r}
-model0 <- update(model, formula = target ~ 1, QR = FALSE)
-(loo0 <- loo(model0))
+# model0 <- update(model, formula = target ~ 1, QR = FALSE)
+# (loo0 <- loo(model0))
+
+p <- 13
+p0 <- 7 # prior guess for the number of relevant variables
+tau0 <- p0/(p-p0) * 1/sqrt(n)
+hs_prior <- hs(df=1, global_df=1, global_scale=tau0)
+c_prior <- cauchy(0, scale = 2.5, autoscale = FALSE)
+model1 <- stan_glm(formula = target ~ acousticness+danceability+instrumentalness+loudness+speechiness+valence,
+                  data = spotify_train,
+                  family = binomial(link = "logit"), 
+                  prior = hs_prior, prior_intercept = c_prior,
+                  seed = SEED, adapt_delta = 0.9)
+
+bayesfactor_parameters(model1, null = 0)
+
+BF(model1)
+
+
+round(coef(model1), 3)
+round(posterior_interval(model1, prob = 0.95), 3)
+mcmc_areas(as.matrix(model1), prob = 0.95, prob_outer = 1) + geom_vline(xintercept=0)
+
+(loo1 <- loo(model1, save_psis = TRUE))
+
+car::vif(model1)
+
 ```
 
 ```{r}
@@ -187,9 +212,21 @@ pred <- colMeans(preds)
 pr <- as.integer(pred >= 0.5)
    
 # posterior classification accuracy
-round(mean(xor(pr,as.integer(spotify_train$target==0))),4)
+round(mean(xor(pr,as.integer(spotify_train$target==0))),3)
 ```
 
+However, this model was fit on a normalized dataset. To retrieve the paramters for our model on unnormalized data, we adjust our coefficients as follows:
+$$
+\begin{equation*}
+\begin{split}
+  \theta &= \beta_0 + \beta_1 \tilde{x}_1 + \ldots + \beta_k \tilde{x}_k \\
+  &= \beta_0 + \beta_1\Big(\frac{x_1-\overline{x}_1}{\sigma_1}\Big) + \ldots + \beta_k\Big(\frac{x_k-\overline{x}_k}{\sigma_k}\Big) \\
+  &= \beta_0 + \Big(\frac{\beta_1}{\sigma_1}x_1 - \frac{\beta_1\overline{x}_1}{\sigma_1}\Big) + \ldots + \Big(\frac{\beta_k}{\sigma_k}x_k - \frac{\beta_k\overline{x}_k}{\sigma_k}\Big) \\
+  &= \Big( \beta_0 - \frac{\beta_1\overline{x}_1}{\sigma_1} - \ldots - \frac{\beta_k\overline{x}_k}{\sigma_k} \Big) + \frac{\beta_1}{\sigma_1}x_1 + \ldots + \frac{\beta_k}{\sigma_k}x_k \\
+  &:= \beta_0^* + \beta_1^*x_1 + \ldots + \beta_k^*x_k
+\end{split}
+\end{equation*}
+$$
 
 ```{r}
 vars <- c("acousticness", "danceability", "duration_ms", "instrumentalness", "loudness", "speechiness", "valence")
