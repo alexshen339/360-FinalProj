@@ -52,7 +52,7 @@ spotify_test <- temp %>%
 spotify_train <- temp %>%
   slice(floor(.25*obs)+1:obs)
 
-
+unnorm_train <- spotify_train
 spotify_test
 spotify_train
 
@@ -175,7 +175,7 @@ pred <- colMeans(preds)
 pr <- as.integer(pred >= 0.5)
    
 # posterior classification accuracy
-round(mean(xor(pr,as.integer(spotify_train$target==0))),3)
+round(mean(xor(pr,as.integer(spotify_train$target==0))),4)
 ```
 
 
@@ -191,7 +191,7 @@ coefficients
 
 
 ```{r}
-spotify_train2 <- spotify_train %>% 
+spotify_train2 <- unnorm_train %>% 
   select(acousticness, danceability, duration_ms, instrumentalness, loudness, speechiness, valence)
 ip <- as.matrix(spotify_train2) %*% (as.matrix(coefficients)[1:ncol(spotify_train2)+1]) + rep(as.matrix(coefficients)[1],nrow(spotify_train2))
 yhat <- exp(ip)/(1+exp(ip)) >= 0.5
