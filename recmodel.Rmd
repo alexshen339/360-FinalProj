@@ -24,6 +24,8 @@ library(loo)
 library(BFpack)
 library(bayestestR)
 library(logspline)
+library(Stat2Data)
+
 #library(projpred)
 #SEED=14124869
 
@@ -78,6 +80,7 @@ spotify_train
 The data set has 2017 songs. We decided to randomly divide this data, with 75% of it becoming the data on which we will train the model on, and the remaining 25% becoming data we will test the model on after it is created. We also check the distribution of target, since we want to make sure there are enough liked and disliked songs in the data set to be able to properly train our model. For example, we do not want to see only a handful of liked songs and almost all disliked songs, as this could result in a model that predicts almost every song as disliked, and will end up with a inflated correct prediction rate. However, as we can see, the data set is split almost into half liked songs and half disliked songs, which is beneficial for training our model.
 
 
+
 ```{r}
 c <- c(6,9,12,14)
 for (i in 1:13) {
@@ -90,7 +93,10 @@ sq <- 1:14
 corrplot(cor(spotify_train[, sq[!sq %in% c]]))
 
 
+
 ```
+
+
 
 Because our continuous predictors are on different scales, we decided to normalize them. We then plot a correlation plot between each of the continuous predictors. As we can see, several variables have a large of correlation. Energy and acousticness as well as loudness and acousticness are negatively correlated, while energy and loudness are positively correlated. We are trying to avoid multicollinearity in our model, and since high correlation often is associated with multicollinearity, we will keep an eye on the pairs of variables with high magnitudes of correlation.
 
@@ -173,6 +179,33 @@ mcmc_areas(as.matrix(model), prob = 0.95, prob_outer = 1) + geom_vline(xintercep
 
 car::vif(model)
 ```
+
+```{r}
+
+par(mfrow=c(3,3))
+emplogitplot1(target ~ instrumentalness, data = spotify_train, 
+              ngroups = 5)
+emplogitplot1(target ~ acousticness, data = spotify_train, 
+              ngroups = 10)
+emplogitplot1(target ~ danceability, data = spotify_train, 
+              ngroups = 10)
+emplogitplot1(target ~ duration_ms, data = spotify_train, 
+              ngroups = 10)
+emplogitplot1(target ~ loudness, data = spotify_train, 
+              ngroups = 10)
+emplogitplot1(target ~ speechiness, data = spotify_train, 
+              ngroups = 10)
+emplogitplot1(target ~ valence, data = spotify_train, 
+              ngroups = 10)
+```
+
+Now that our model is created, we check our model conditions for logistic regression. The first condition is linearity. As is shown by the graphs above, each of the continuous predictors in our final model appears to have a more or less linear relationship with the log odds of the person liking a song. As a result, the linearity condition is satisfied. 
+
+The next condition is the randomness condition. Because the samples are not stated to be truly randomly taken we must consider whether or not the observations differ systemically from our population of interest. The population of interest is songs that the person who made the data set listens to and rates as a like or a dislike, and so there is no reason to believe that the sample is not representative of the population. The randomness condition is satisfied.
+
+The next condition is the independence condition. We have no reason to believe that each song is not independent from one another, and so the independence condition is satisifed. 
+
+Lastly, we check multicollinearity by checking the variance inflation factors of each of the variables. As seen in the output, since all VIF values are under 10, multicollinearity is not a problem in our model.
 
 
 ```{r}
