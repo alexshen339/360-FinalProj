@@ -161,9 +161,13 @@ Because our continuous predictors are on different scales, we decided to normali
 # BF(model)
 ```
 
-We decided to backwards select our model using Bayes factors, which are useful in selecting Bayesian models. In our full model, we included all predictors with target as the response variable. We also decided to add some interaction effects. We thought that the mode variable (modality of a song, major or minor) would affect the danceability of a song as well as the valence (measurement of how happy a song sounds). We also thought that the time signature of a song might affect its tempo. As a result, we added interactions between mode and danceability, mode and valence, and time signature and tempo.
+In this project, we consider three different prediction models: a logistic regression model which uses Cauchy(0,2.5) priors for its coefficients, a logistic regression model which uses horseshoe priors for its coefficients, and a "null" model which produces 1 ("yes" for liking the song), regardless of input variables.
+
+We decided to backwards select our models using Bayes factors, which are useful in selecting Bayesian models. In our full model, we included all predictors with target as the response variable. We also decided to add some interaction effects. We thought that the mode variable (modality of a song, major or minor) would affect the danceability of a song as well as the valence (measurement of how happy a song sounds). We also thought that the time signature of a song might affect its tempo. As a result, we added interactions between mode and danceability, mode and valence, and time signature and tempo.
 
 We calculated the Bayes factor of each coefficient compared to a point-null, which is the Savage-Dickey Ratio (https://easystats.github.io/bayestestR/articles/bayes_factors.html). We also checked the p value of a hypothesis test for each coefficient equaling 0. We dropped the term with the highest p value and lowest Bayes factor (these were always in agreement). We stopped when each term had a Bayes factor that can be interpreted as strong (or better) support for the coefficient not equaling zero. (https://www.statisticshowto.com/bayes-factor-definition/)
+
+
 
 ```{r}
 model <- stan_glm(
@@ -185,6 +189,8 @@ mcmc_areas(as.matrix(model), prob = 0.95, prob_outer = 1) + geom_vline(xintercep
 (loo1 <- loo(model, save_psis = TRUE))
 
 car::vif(model)
+
+summary(model)
 ```
 
 ```{r}
@@ -216,19 +222,7 @@ Lastly, we check multicollinearity by checking the variance inflation factors of
 
 
 ```{r}
-# model0 <- update(model, formula = target ~ 1, QR = FALSE)
-# (loo0 <- loo(model0))
-
-p <- 13
-p0 <- 7 # prior guess for the number of relevant variables
-tau0 <- p0/(p-p0) * 1/sqrt(n)
-hs_prior <- hs(df=1, global_df=1, global_scale=tau0)
-c_prior <- cauchy(0, scale = 2.5, autoscale = FALSE)
-model1 <- stan_glm(formula = target ~ acousticness+danceability+instrumentalness+loudness+speechiness+valence,
-                  data = spotify_train,
-                  family = binomial(link = "logit"), 
-                  prior = hs_prior, prior_intercept = c_prior,
-                  seed = SEED, adapt_delta = 0.9)
+model1 <- update(model, formula = target ~ 1, QR = FALSE)
 
 bayesfactor_parameters(model1, null = 0)
 
@@ -240,8 +234,33 @@ round(posterior_interval(model1, prob = 0.95), 3)
 mcmc_areas(as.matrix(model1), prob = 0.95, prob_outer = 1) + geom_vline(xintercept=0)
 
 (loo1 <- loo(model1, save_psis = TRUE))
+```
 
-car::vif(model1)
+
+```{r}
+p <- 13
+p0 <- 7 # prior guess for the number of relevant variables
+tau0 <- p0/(p-p0) * 1/sqrt(n)
+hs_prior <- hs(df=1, global_df=1, global_scale=tau0)
+c_prior <- cauchy(0, scale = 2.5, autoscale = FALSE)
+hs_model <- stan_glm(formula = target ~ acousticness+danceability+instrumentalness+loudness+speechiness+valence,
+                  data = spotify_train,
+                  family = binomial(link = "logit"), 
+                  prior = hs_prior, prior_intercept = c_prior,
+                  seed = SEED, adapt_delta = 0.9)
+
+bayesfactor_parameters(hs_model, null = 0)
+
+BF(hs_model)
+
+
+round(coef(hs_model), 3)
+round(posterior_interval(hs_model, prob = 0.95), 3)
+mcmc_areas(as.matrix(hs_model), prob = 0.95, prob_outer = 1) + geom_vline(xintercept=0)
+
+(loo1 <- loo(hs_model, save_psis = TRUE))
+
+car::vif(hs_model)
 
 ```
 
@@ -254,6 +273,8 @@ pr <- as.integer(pred >= 0.5)
 # posterior classification accuracy
 round(mean(xor(pr,as.integer(spotify_train$target==0))),3)
 ```
+
+To compare the predictive performance of our three models, we use leave-one-out cross-validation (LOO). In particular, we use the LOO Information Criterion (LOOIC) as a metric by which to measure the predictive performance of our models. LOOIC measures the predictive accuracy of a given model by leaving a single sample out of the training set and training the model on the all other samples in the dataset. It then tests its accuracy on this single left-out sample and repeats this process for all other samples in the training set. LOOIC reports a metric based on the accuracy of these LOO predictions, where a lower LOOIC score corresponds to a better model. The LOOIC values for all three models are shown below. Of the three models, we see that *** performed the best. 
 
 However, this model was fit on a normalized dataset. To retrieve the paramters for our model on unnormalized data, we adjust our coefficients as follows:
 $$
