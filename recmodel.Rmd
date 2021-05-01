@@ -65,10 +65,11 @@ spotify <- spotify %>%
   select(acousticness, danceability, duration_ms, energy, instrumentalness, key, liveness, loudness, mode, speechiness, tempo, time_signature, valence, target)
 
 
-spotify %>% 
+spotify_count <- spotify %>% 
   group_by(target) %>% 
   count()
 
+ggplot(data = spotify_count, aes(x = target, y = n, fill = target)) + geom_bar(stat = "identity") + scale_color_manual(values = c("lightblue", "steelblue")) + labs(title = "Distribution of Target", x = "Target", y = "Count")
 
 obs <- nrow(spotify)
 rows <- sample(obs, replace = FALSE)
@@ -82,13 +83,11 @@ unnorm_train <- spotify_train
 
 ```
 
-
-
 The data set has 2017 songs. We decided to randomly divide this data, with 75% of it becoming the data on which we will train the model on, and the remaining 25% becoming data we will test the model on after it is created. We also check the distribution of target, since we want to make sure there are enough liked and disliked songs in the data set to be able to properly train our model. For example, we do not want to see only a handful of liked songs and almost all disliked songs, as this could result in a model that predicts almost every song as disliked, and will end up with a inflated correct prediction rate. However, as we can see, the data set is split almost into half liked songs and half disliked songs, which is beneficial for training our model.
 
 After selecting the variables relevant to our analysis, we also factorized the categorical variables so that R would not accidentally treat them as continuous.
 
-For our purposes, since we are trying to model and predict whether or not this person likes a song, the response variable target takes the value of 0 or 1. That means our sampling model is a Bernoulli distribution with probability p. 
+For our purposes, since we are trying to model and predict whether or not this person likes a song, the response variable target takes the value of 0 or 1. That means our sampling model is a Bernoulli distribution with probability $p$, so $Y_i \sim Bernoulli(p)$. 
 
 
 ```{r normalize, warning = FALSE}
@@ -113,6 +112,8 @@ Because our continuous predictors are on different scales, we decided to normali
 ## Model Creation
 
 We were not able to find another logistic regression on a data set of songs on Spotify in order to predict whether or not someone likes a song. As a result, we did not have much information about what the coefficients might be, and decided to choose weakly informative priors. In this project, we consider three different prediction models: a logistic regression model which uses Cauchy(0,2.5) priors for its coefficients, a logistic regression model which uses regularized horseshoe priors for its coefficients, and a "null" model which produces 1 (a "yes" for liking the song), regardless of input variables. We choose a Cauchy(0,2.5) prior for our first model because it is an empirically successful choice for weakly informative priors (https://projecteuclid.org/journals/annals-of-applied-statistics/volume-2/issue-4/A-weakly-informative-default-prior-distribution/10.1214/08-AOAS191.full). Regularized horseshoe priors are typically meant for models in which the number of predictive variables is large in comparison to the number of samples. Although this is not the case in our experiment ($n=2017$, $p=13$), we were still interested to see whether this model could outperform our standard model.
+
+We find the posterior of our model via Gibbs sampling on the coefficients of our distribution. 
 
 We decided to backwards select our models using Bayes factors, which are useful in selecting Bayesian models. In our full model, we included all predictors with target as the response variable. We also decided to add some interaction effects. We thought that the mode variable (modality of a song, major or minor) would affect the danceability of a song as well as the valence (measurement of how happy a song sounds). We also thought that the time signature of a song might affect its tempo. As a result, we added interactions between mode and danceability, mode and valence, and time signature and tempo.
 
@@ -198,9 +199,13 @@ emplogitplot1(target ~ speechiness, data = spotify_train,
 emplogitplot1(target ~ valence, data = spotify_train, 
               ngroups = 10)
 
-car::vif(model)
+tidy(car::vif(model)) %>% 
+  rename(Variables = names,
+         VIF = x)
 
-car::vif(hs_model)
+tidy(car::vif(hs_model)) %>% 
+  rename(Variables = names,
+         VIF = x)
 
 ```
 
