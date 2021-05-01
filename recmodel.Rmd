@@ -348,3 +348,13 @@ yhat_test <- as.integer(yhat_test)
 ytest <- spotify_test$target
 mean(yhat_test == ytest) 
 ```
+
+
+## Conclusion
+
+Our final model with a weakly informative cauchy prior had a predictive accuracy of INSERT NUMBER on the training data. This accuracy is noticeably better than our null model that guesses 1 every time and ends up with an average prediction accuracy of a little over 50% because the data is comprised of a little over 50% liked songs. 
+
+This prediction/recommendation accuracy would be acceptable to us as Spotify users. From anecdotal evidence, while Spotify does recommend plenty of songs that we enjoy, it also recommends many songs that we do not like as well. From being active Spotify users, we would estimate the accuracy of Spotify's recommendations to be in the same ballpark as our predictive accuracy. Spotify also has the added bonus of having extra variables to create their recommendation that we were not able to use. For example, Spotify is able to take into account similar user's activities as well as information about artists and genres that we were not able to use. However, we do have the advantage of explicitly knowing whether or not a song is liked or disliked, while Spotify must infer that information for each user. Because our model was built given this information, it does not have the capability to be used as a replacement to Spotify's algorithm because users will not explicitly record whether or not they like each song. 
+
+For further exploration on this topic, if we had access to data regarding listening times, whether or not a song is on a user's playlist, and other such data that might clue us in on if a user enjoys a song, we could create an algorithm with this data to figure out if a user likes a song, and then create recommendations with our current logistic models using the values of 'target' that we predicted. This would probably drop our accuracy rate, but it would then have the potential for real world use within the Spotify app that Spotify's algorithms have. Until then, our algorithm can be used for people like the Kaggle user who compiled information about songs he or she did or didn't like.
+
