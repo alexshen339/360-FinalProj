@@ -319,7 +319,7 @@ yhat_test <- exp(ip)/(1+exp(ip)) >= 0.5
 
 yhat_test <- as.integer(yhat_test)
 ytest <- spotify_test$target
-mean(yhat_test == ytest)
+mean(yhat_test == ytest) 
 ```
 
 
