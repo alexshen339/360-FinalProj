@@ -185,8 +185,6 @@ bayesfactor_parameters(model, null = 0)
 
 BF(model)
 
-round(coef(model), 3)
-round(posterior_interval(model, prob = 0.95), 3)
 mcmc_areas(as.matrix(model), prob = 0.95, prob_outer = 1) + geom_vline(xintercept=0)
 
 
@@ -215,33 +213,17 @@ bayesfactor_parameters(hs_model, null = 0)
 
 BF(hs_model)
 
-
-round(coef(hs_model), 3)
-round(posterior_interval(hs_model, prob = 0.95), 3)
 mcmc_areas(as.matrix(hs_model), prob = 0.95, prob_outer = 1) + geom_vline(xintercept=0)
-
-
-
 
 
 summary(hs_model)
 tidy(hs_model) %>% 
   knitr::kable(digits = 3)
 ```
-
+Using a Rhat convergence diagnostic for each variable in each model, we find that all variables produced a Rhat value less than 1.05, which is within the valid range for convergence of the MCMC process (https://mc-stan.org/rstan/reference/Rhat.html).
 
 ```{r null}
 model1 <- update(model, formula = target ~ 1, QR = FALSE)
-
-bayesfactor_parameters(model1, null = 0)
-
-BF(model1)
-
-
-round(coef(model1), 3)
-round(posterior_interval(model1, prob = 0.95), 3)
-mcmc_areas(as.matrix(model1), prob = 0.95, prob_outer = 1) + geom_vline(xintercept=0)
-
 
 ```
 ```{r conditions}
@@ -287,20 +269,7 @@ Lastly, we check multicollinearity by checking the variance inflation factors of
 ```
 
 
-
-
-
-```{r prediction}
-linpred <- posterior_linpred(model)
-preds <- posterior_epred(model)
-pred <- colMeans(preds)
-pr <- as.integer(pred >= 0.5)
-   
-# posterior classification accuracy
-round(mean(xor(pr,as.integer(spotify_train$target==0))),3)
-```
-
-To compare the predictive performance of our three models, we use leave-one-out cross-validation (LOO). In particular, we use the LOO Information Criterion (LOOIC) as a metric by which to measure the predictive performance of our models. LOOIC measures the predictive accuracy of a given model by leaving a single sample out of the training set and training the model on the all other samples in the dataset. It then tests its accuracy on this single left-out sample and repeats this process for all other samples in the training set. LOOIC reports a metric based on the accuracy of these LOO predictions, where a lower LOOIC score corresponds to a better model (http://mc-stan.org/rstanarm/reference/loo.stanreg.html). The LOOIC values for all three models are shown below. Of the three models, we see that *** performed the best. 
+To compare the predictive performance of our three models, we use leave-one-out cross-validation (LOO). In particular, we use the LOO Information Criterion (LOOIC) as a metric by which to measure the predictive performance of our models. LOOIC measures the predictive accuracy of a given model by leaving a single sample out of the training set and training the model on the all $n-1$ other samples in the dataset. It then tests its accuracy on this single left-out sample and repeats this process for all other samples in the training set. LOOIC reports a metric based on the accuracy of these LOO predictions, where a lower LOOIC score corresponds to a better model (http://mc-stan.org/rstanarm/reference/loo.stanreg.html). The LOOIC values for all three models are shown below. Of the three models, we see that the cauchy prior model performed the best.
 
 With our chosen model, we now want to be able to use it on song data we may find in the wild. However, our current model was fit on a normalized dataset, so its parameters are only trained to classify songs by characteristics with mean 0 and standard deviation 1. To retrieve the parameters for a model that works on unnormalized data ($x_i$) instead of normalized data $\tilde{x}_i$, we adjust our coefficients as follows:
 
@@ -315,7 +284,37 @@ $$
 \end{split}
 \end{equation*}
 $$
+```{r prediction}
+linpred <- posterior_linpred(model)
+preds <- posterior_epred(model)
+pred <- colMeans(preds)
+pr <- as.integer(pred >= 0.5)
+   
+# posterior classification accuracy
+model_train_acc <- round(mean(xor(pr,as.integer(spotify_train$target==0))),3)
 
+hs_linpred <- posterior_linpred(hs_model)
+hs_preds <- posterior_epred(hs_model)
+hs_pred <- colMeans(hs_preds)
+hs_pr <- as.integer(hs_pred >= 0.5)
+   
+# posterior classification accuracy
+hs_train_acc <- round(mean(xor(hs_pr,as.integer(spotify_train$target==0))),3)
+
+linpred1 <- posterior_linpred(model1)
+preds1 <- posterior_epred(model1)
+pred1 <- colMeans(preds1)
+pr1 <- as.integer(pred1 >= 0.5)
+   
+# posterior classification accuracy
+one_train_acc <- round(mean(xor(pr1,as.integer(spotify_train$target==0))),3)
+
+model_train_acc
+hs_train_acc
+one_train_acc
+```
+
+With our unnormalized model, we first check to see how well it predicts the 'target' value of the samples on which it was trained. Using a probability threshold of 0.5, we find that our cauchy prior predictor categorizes `r model_train_acc` of the songs in the training set. For comparison, the horseshoe prior model has a prediction accuracy of `r hs_train_acc`, and the "null" model has a prediction accuracy of `r one_train_acc` on the training set. Of course, here we are checking performance on songs which the models have already trained on. What we really want to measure is the ability of our models to make predictions on songs they have not yet seen. For this, we check the accuracy of our models on the test set. Again, using a probability threshold of 0.5, we find that our cauchy prior predictor has accuracy `r model_test_acc` on songs in the test set. For comparison, the horseshoe prior model has prediction accuracy `hs_test_acc`, and the "null" model has prediction accuracy of `one_test_acc` on the test set. Thus, we see that under this metric, the cauchy prior predictor again performs the best.
 ```{r unormalize}
 vars <- c("acousticness", "danceability", "duration_ms", "instrumentalness", "loudness", "speechiness", "valence")
 coefficients <- coef(model)
@@ -324,6 +323,13 @@ for(var in vars){
   coefficients["(Intercept)"] <- coefficients["(Intercept)"] - coefficients[var]*smeans[var]
 }
 
+
+hs_vars <- c("acousticness", "danceability", "instrumentalness", "loudness", "speechiness", "valence")
+hs_coefficients <- coef(hs_model)
+for(var in hs_vars){
+  hs_coefficients[var] <- hs_coefficients[var]/ssds[var]
+  hs_coefficients["(Intercept)"] <- hs_coefficients["(Intercept)"] - hs_coefficients[var]*smeans[var]
+}
 ```
 
 
@@ -346,5 +352,24 @@ yhat_test <- exp(ip)/(1+exp(ip)) >= 0.5
 
 yhat_test <- as.integer(yhat_test)
 ytest <- spotify_test$target
-mean(yhat_test == ytest) 
+model_test_acc <- mean(yhat_test == ytest) 
+
+
+spotify_test2 <- spotify_test %>% 
+  select(acousticness, danceability, instrumentalness, loudness, speechiness, valence)
+ip <- as.matrix(spotify_test2) %*% (as.matrix(hs_coefficients)[1:ncol(spotify_test2)+1]) + rep(as.matrix(hs_coefficients)[1],nrow(spotify_test2))
+yhat_test <- exp(ip)/(1+exp(ip)) >= 0.5
+
+
+yhat_test <- as.integer(yhat_test)
+ytest <- spotify_test$target
+hs_test_acc <- mean(yhat_test == ytest) 
+
+
+ytest <- spotify_test$target
+one_test_acc <- mean(1 == ytest) 
+
+model_test_acc
+hs_test_acc
+one_test_acc
 ```
