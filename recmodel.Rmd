@@ -41,7 +41,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ## Introduction
 
-Spotify is a music streaming service with 356 million monthly active users and over 70 million tracks in their library. What drives their success? Aside from the size of the library, it is their ability to keep users engaged by providing a constant stream of relevant song and even podcast recommendations. In order to make these recommendations, there must be some data on songs as well as user preference data that can help decide which songs to recommend to a particular person. Some of Spotify's competitors such as Pandora will tag songs with attributes manually, while Spotify has the advantage of using deep learning models to do this as well as synthesize this with artist, genre, and user preference information in order to better inform recommendations. The three main recommendation models used at Spotify include collaborative filtering (which analyzes similarity in behavior between users), natural language processing or NLP (which extracts information from words in song lyrics, song titles, and playlist titles), and audio models (which detect patterns in raw audio content). (ADD CITATION)
+Spotify is a music streaming service with 356 million monthly active users and over 70 million tracks in their library. What drives their success? Aside from the size of the library, it is their ability to keep users engaged by providing a constant stream of relevant song and even podcast recommendations. In order to make these recommendations, there must be some data on songs as well as user preference data that can help decide which songs to recommend to a particular person. Some of Spotify's competitors such as Pandora will tag songs with attributes manually, while Spotify has the advantage of using deep learning models to do this as well as synthesize this with artist, genre, and user preference information in order to better inform recommendations. The three main recommendation models used at Spotify include collaborative filtering (which analyzes similarity in behavior between users), natural language processing or NLP (which extracts information from words in song lyrics, song titles, and playlist titles), and audio models (which detect patterns in raw audio content). (Boyd)
 
 Our data set came from Kaggle, and was based on one person's music preferences. Each observation in the data is a song on Spotify, and we are given information about each song, as well as whether or not the person liked the song. Continuous variables of interest that are between 0 and 1 include acousticness, danceability, energy, instrumentalness (amount of vocals in a song), liveness (how likely the song was recorded live), loudness, speechiness (amount of spoken words in a song), and valence (measure of how happy a song sounds). Other variables of interest include duration_ms (continuous variable denoting duration of the song in ms), key (categorical variable denoting the key of the song from 0-11), mode (modality of the song expressed as 0 or 1, corresponding to major or minor), tempo (continuous variable in BPM), time_signature (categorical variable from 1-5), and target (whether or not the person liked the song expressed as a 0 or 1). Most of these variables come from Spotify's automated deep learning models that processes the raw audio of songs. 
 
@@ -87,7 +87,7 @@ The data set has 2017 songs. We decided to randomly divide this data, with 75% o
 
 After selecting the variables relevant to our analysis, we also factorized the categorical variables so that R would not accidentally treat them as continuous.
 
-For our purposes, since we are trying to model and predict whether or not this person likes a song, the response variable target takes the value of 0 or 1. That means our sampling model is a Bernoulli distribution with probability $p$, so $Y_i \sim Bernoulli(p)$. 
+For our purposes, since we are trying to model and predict whether or not this person likes a given song, the response variable target takes the value of 0 or 1. That means our sampling model is a Bernoulli distribution with probability $p$, or $Y_i \sim Bernoulli(p)$. 
 
 
 ```{r normalize, warning = FALSE}
@@ -111,13 +111,13 @@ Because our continuous predictors are on different scales, we decided to normali
 
 ## Model Creation
 
-We were not able to find another logistic regression on a data set of songs on Spotify in order to predict whether or not someone likes a song. As a result, we did not have much information about what the coefficients might be, and decided to choose weakly informative priors. In this project, we consider three different prediction models: a logistic regression model which uses Cauchy(0,2.5) priors for its coefficients, a logistic regression model which uses regularized horseshoe priors for its coefficients, and a "null" model which produces 1 (a "yes" for liking the song), regardless of input variables. We choose a Cauchy(0,2.5) prior for our first model because it is an empirically successful choice for weakly informative priors (https://projecteuclid.org/journals/annals-of-applied-statistics/volume-2/issue-4/A-weakly-informative-default-prior-distribution/10.1214/08-AOAS191.full). Regularized horseshoe priors are typically meant for models in which the number of predictive variables is large in comparison to the number of samples. Although this is not the case in our experiment ($n=2017$, $p=13$), we were still interested to see whether this model could outperform our standard model.
+We were not able to find another logistic regression on a data set of songs on Spotify in order to predict whether or not someone likes a song. As a result, we did not have much information about what the coefficients might be, and decided to choose weakly informative priors. In this project, we consider three different prediction models: a logistic regression model which uses Cauchy(0,2.5) priors for its coefficients, a logistic regression model which uses regularized horseshoe priors for its coefficients, and a "null" model which produces 1 (a "yes" for liking the song), regardless of input variables. We choose a Cauchy(0,2.5) prior for our first model because it is an empirically successful choice for weakly informative priors (Gelman, et al.). Regularized horseshoe priors are typically meant for models in which the number of predictive variables is large in comparison to the number of samples. Although this is not the case in our experiment ($n=2017$, $p=13$), we were still interested to see whether this model could outperform our standard model.
 
-We find the posterior of our model via Gibbs sampling on the coefficients of our distribution. 
+By specifying our prior distributions, $\texttt{stan_glm()}$ will fit a logistic model to the data by MCMC sampling over the posterior distributions. We used the default rstanarm settings of running 4 Markov chains for each distribution, with each chain being 2000 iterations. As shown below, using a Rhat convergence diagnostic for each variable in each model, we find that all variables produced a Rhat value less than 1.05, which is within the valid range for convergence of the MCMC process (Guo, et al.).
 
 We decided to backwards select our models using Bayes factors, which are useful in selecting Bayesian models. In our full model, we included all predictors with target as the response variable. We also decided to add some interaction effects. We thought that the mode variable (modality of a song, major or minor) would affect the danceability of a song as well as the valence (measurement of how happy a song sounds). We also thought that the time signature of a song might affect its tempo. As a result, we added interactions between mode and danceability, mode and valence, and time signature and tempo.
 
-We calculated the Bayes factor of each coefficient compared to a point-null, which is the Savage-Dickey Ratio (https://easystats.github.io/bayestestR/articles/bayes_factors.html). We also checked the p value of a hypothesis test for each coefficient equaling 0. We dropped the term with the highest p value and lowest Bayes factor (these were always in agreement). We stopped when each term had a Bayes factor that can be interpreted as strong (or better) support for the coefficient not equaling zero. (https://www.statisticshowto.com/bayes-factor-definition/)
+We calculated the Bayes factor of each coefficient compared to a point-null, which is the Savage-Dickey Ratio (Makowski, et al.). We also checked the p value of a hypothesis test for each coefficient equaling 0. We dropped the term with the highest p value and lowest Bayes factor (these were always in agreement). We stopped when each term had a Bayes factor that can be interpreted as strong (or better) support for the coefficient not equaling zero. (Lee & Wagenmakers)
 
 ### Model with Cauchy Prior
 
@@ -170,7 +170,6 @@ tidy(hs_model) %>%
   knitr::kable(digits = 3)
 ```
 
-Using a Rhat convergence diagnostic for each variable in each model, we find that all variables produced a Rhat value less than 1.05, which is within the valid range for convergence of the MCMC process (https://mc-stan.org/rstan/reference/Rhat.html).
 
 ## Model Conditions
 
@@ -231,11 +230,11 @@ model1_loo <- round(loo3$looic, 2)
 ```
 
 
-To compare the predictive performance of our three models, we use leave-one-out cross-validation (LOO). In particular, we use the LOO Information Criterion (LOOIC) as a metric by which to measure the predictive performance of our models. LOOIC measures the predictive accuracy of a given model by leaving a single sample out of the training set and training the model on the all $n-1$ other samples in the dataset. It then tests its accuracy on this single left-out sample and repeats this process for all other samples in the training set. LOOIC reports a metric based on the accuracy of these LOO predictions, where a lower LOOIC score corresponds to a better model (http://mc-stan.org/rstanarm/reference/loo.stanreg.html). The LOOIC values for all three models are shown below. Of the three models, we see that the cauchy prior model performed the best.
+To compare the predictive performance of our three models, we use leave-one-out cross-validation (LOO). In particular, we use the LOO Information Criterion (LOOIC) as a metric by which to measure the predictive performance of our models. LOOIC measures the predictive accuracy of a given model by leaving a single sample out of the training set and training the model on the all $n-1$ other samples in the dataset. It then tests its accuracy on this single left-out sample and repeats this process for all other samples in the training set. LOOIC reports a metric based on the accuracy of these LOO predictions, where a lower LOOIC score corresponds to a better model (Gabry & Goodrich). The LOOIC values for all three models are shown below. Of the three models, we see that the cauchy prior model performed the best.
 
-Model   HS      Null
------   -----   -----
-`r model_loo`   `r hs_loo`    `r model1_loo`
+Cauchy        |  Horseshoe    |     Null
+------        |  ---------    |     -----
+`r model_loo` |   `r hs_loo`  |   `r model1_loo`
 
 With our chosen model, we now want to be able to use it on song data we may find in the wild. However, our current model was fit on a normalized dataset, so its parameters are only trained to classify songs by characteristics with mean 0 and standard deviation 1. To retrieve the parameters for a model that works on unnormalized data ($x_i$) instead of normalized data $\tilde{x}_i$, we adjust our coefficients as follows:
 
@@ -303,10 +302,14 @@ spotify_test2 <- spotify_test %>%
 ip <- as.matrix(spotify_test2) %*% (as.matrix(coefficients)[1:ncol(spotify_test2)+1]) + rep(as.matrix(coefficients)[1],nrow(spotify_test2))
 yhat_test <- exp(ip)/(1+exp(ip)) >= 0.5
 
-
 yhat_test <- as.integer(yhat_test)
 ytest <- spotify_test$target
-model_test_acc <- mean(yhat_test == ytest) 
+model_test_acc <- mean(yhat_test == ytest)
+
+tp <- sum(yhat_test * (as.integer(ytest) - 1))/sum(yhat_test)
+model_test_fp <- round(1 - tp, 4)
+tn <- sum((1 - yhat_test) * (2 - as.integer(ytest)))/sum(1 - yhat_test)
+model_test_fn <- round(1 - tn, 4)
 
 
 spotify_test2 <- spotify_test %>% 
@@ -314,24 +317,36 @@ spotify_test2 <- spotify_test %>%
 ip <- as.matrix(spotify_test2) %*% (as.matrix(hs_coefficients)[1:ncol(spotify_test2)+1]) + rep(as.matrix(hs_coefficients)[1],nrow(spotify_test2))
 yhat_test <- exp(ip)/(1+exp(ip)) >= 0.5
 
-
 yhat_test <- as.integer(yhat_test)
 ytest <- spotify_test$target
 hs_test_acc <- mean(yhat_test == ytest) 
 
+tp <- sum(yhat_test * (as.integer(ytest) - 1))/sum(yhat_test)
+hs_test_fp <- round(1 - tp, 4)
+tn <- sum((1 - yhat_test) * (2 - as.integer(ytest)))/sum(1 - yhat_test)
+hs_test_fn <- round(1 - tn, 4)
+
 
 ytest <- spotify_test$target
 one_test_acc <- mean(1 == ytest) 
-
+tp <- sum(1 * (as.integer(ytest) - 1))/nrow(spotify_test)
+one_test_fp <- round(1 - tp, 4)
 
 ```
 
 With our unnormalized model, we first check to see how well it predicts the 'target' value of the samples on which it was trained. Using a probability threshold of 0.5, we find that our cauchy prior predictor categorizes `r model_train_acc` of the songs in the training set. For comparison, the horseshoe prior model has a prediction accuracy of `r hs_train_acc`, and the "null" model has a prediction accuracy of `r one_train_acc` on the training set. Of course, here we are checking performance on songs which the models have already trained on. What we really want to measure is the ability of our models to make predictions on songs they have not yet seen. For this, we check the accuracy of our models on the test set. Since our models have not seen this data yet, we would expect their performance on this dataset to be slightly worse than on the training set. This is exactly what we see for the cauchy and horseshoe prior models. Again, using a probability threshold of 0.5, we find that our cauchy prior predictor has accuracy `r model_test_acc` on songs in the test set. For comparison, the horseshoe prior model has prediction accuracy `hs_test_acc`, and the "null" model has prediction accuracy of `one_test_acc` on the test set. Thus, we see that under this metric, the cauchy prior predictor again performs the best.
 
+We also find that all of our models seem to perform better on negative examples than on positive one. The false positive rate for our cauchy prior model was `model_test_fp`, while its false negative rate was `model_test_fn`. The values for all models are given in the table below. While the cauchy prior model still performed best on both metrics, this trend exists for all three models, which seems to imply that songs this person dislikes are easier to categorize based on song attributes alone than songs he likes.
+
+Class Error     |   Cauchy              |   Horseshoe      |    Null
+-----------     |   ------              |   ---------      |    ----
+False Positive  |   `r model_test_fp`   |   `r hs_test_fp` |    `r one_test_fp`
+False Negative  |   `r model_test_fn`   |   `r hs_test_fn` |    Undefined
+
 
 ## Conclusion
 
-Our final model with a weakly informative cauchy prior had a predictive accuracy of `r model_test_acc` on the testing data. This accuracy is noticeably better than our null model that guesses 1 every time and ends up with an average prediction accuracy of a little over 50% because the data is comprised of a little over 50% liked songs. 
+Our final model with a weakly informative cauchy prior had a predictive accuracy of `r model_test_acc` on the testing data. This accuracy is noticeably better than our null model that guesses 1 every time and ends up with an average prediction accuracy of a little over 50%, a result of the data being comprised of a little over 50% liked songs. 
 
 This prediction/recommendation accuracy would be acceptable to us as Spotify users. From anecdotal evidence, while Spotify does recommend plenty of songs that we enjoy, it also recommends many songs that we do not like as well. From being active Spotify users, we would estimate the accuracy of Spotify's recommendations to be in the same ballpark as our predictive accuracy. Spotify also has the added bonus of having extra variables to create their recommendation that we were not able to use. For example, Spotify is able to take into account similar user's activities as well as information about artists and genres that we were not able to use. However, we do have the advantage of explicitly knowing whether or not a song is liked or disliked, while Spotify must infer that information for each user. Because our model was built given this information, it does not have the capability to be used as a replacement to Spotify's algorithm because users will not explicitly record whether or not they like each song. 
 
